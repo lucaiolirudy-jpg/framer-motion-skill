@@ -1,0 +1,74 @@
+<!doctype html><html><head><meta charset="utf-8">
+<style>html,body{margin:0;background:transparent}</style>
+<script type="importmap">{"imports":{"three":"./lib/build/three.module.js","three/addons/":"./lib/examples/jsm/"}}</script>
+</head><body><script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+const W = 600, H = 800;
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true, premultipliedAlpha: false });
+renderer.setSize(W, H); renderer.setPixelRatio(1); renderer.setClearColor(0x000000, 0);
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(renderer), 0.04).texture;
+const cam = new THREE.PerspectiveCamera(30, W / H, 0.1, 50);
+const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(2, 4, 3); key.castShadow = true; key.shadow.mapSize.set(1024, 1024);
+Object.assign(key.shadow.camera, { left: -2, right: 2, top: 2, bottom: -2 }); scene.add(key, new THREE.AmbientLight(0xffffff, 0.35));
+const rim = new THREE.DirectionalLight(0x9fd4ff, 1.4); rim.position.set(-3, 2, -2); scene.add(rim);
+const ground = new THREE.Mesh(new THREE.CircleGeometry(1.1, 64), new THREE.ShadowMaterial({ opacity: 0.35 })); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 0.9, 96), new THREE.MeshBasicMaterial({ color: 0x28c850, transparent: true, opacity: 0.8 })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.002; scene.add(ring);
+const muscle = new THREE.MeshPhysicalMaterial({ color: 0xc8463e, roughness: 0.42, clearcoat: 0.5, clearcoatRoughness: 0.3, sheen: 0.6, sheenColor: new THREE.Color(0xff9a8a) });
+const muscle2 = new THREE.MeshPhysicalMaterial({ color: 0xa8362f, roughness: 0.5, clearcoat: 0.4 });
+const bone = new THREE.MeshPhysicalMaterial({ color: 0xf3ead8, roughness: 0.35, clearcoat: 0.6 });
+const glow = new THREE.MeshBasicMaterial({ color: 0x2bd65a });
+const iron = new THREE.MeshPhysicalMaterial({ color: 0x2a2a2e, metalness: 0.8, roughness: 0.35 });
+const root = new THREE.Group(); scene.add(root);
+const cast = (m) => { m.castShadow = true; return m; };
+// limb as capsule between two points
+// muscle-belly spindle of unit height (y from -0.5 to 0.5), radius profile r0 (top) -> r1 (bottom)
+function spindle(r0, r1, belly = 1.25) { const pts = []; const N = 24; for (let i = 0; i <= N; i++) { const u = i / N; const base = r1 + (r0 - r1) * u; const r = base * (0.55 + 0.45 * Math.pow(Math.sin(Math.PI * u), 0.7) * belly); pts.push(new THREE.Vector2(Math.max(0.001, r), u - 0.5)); } return new THREE.LatheGeometry(pts, 28); }
+function limb(r0, r1, mat, belly) { const m = cast(new THREE.Mesh(spindle(r0, r1, belly), mat)); root.add(m); return m; }
+function place(m, a, b, flatZ = 1) { const d = new THREE.Vector3().subVectors(a, b); const L = d.length(); m.position.copy(b).addScaledVector(d, 0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize()); m.scale.set(1, L, flatZ); }
+const jointBall = (r) => { const m = cast(new THREE.Mesh(new THREE.SphereGeometry(r, 24, 16), bone)); root.add(m); return m; };
+const legs = [0.09, -0.09].map((z) => ({ z, thigh: limb(0.085, 0.06, muscle), shin: limb(0.06, 0.04, muscle2), knee: jointBall(0.05), foot: cast(new THREE.Mesh(new RoundedBoxGeometry(0.24, 0.07, 0.1, 3, 0.03), bone)) }));
+legs.forEach(l => root.add(l.foot));
+const torso = limb(0.19, 0.14, muscle, 1.1);
+const pelvis = cast(new THREE.Mesh(new THREE.SphereGeometry(0.13, 24, 16), bone)); pelvis.scale.set(1, 0.7, 1.25); root.add(pelvis);
+const head = cast(new THREE.Mesh(new THREE.SphereGeometry(0.1, 32, 24), bone)); head.scale.set(1, 1.15, 0.92); root.add(head);
+const jaw = cast(new THREE.Mesh(new THREE.SphereGeometry(0.06, 20, 12), bone)); root.add(jaw);
+const neck = limb(0.05, 0.055, muscle2, 0.6);
+const arms = [0.17, -0.17].map((z) => ({ z, up: limb(0.055, 0.04, muscle), fo: limb(0.045, 0.03, muscle2), sh: jointBall(0.055), db: (() => { const g = new THREE.Group(); const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.2, 12), iron); bar.rotation.x = Math.PI / 2; g.add(bar); [-1, 1].forEach(s => { const p = cast(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.05, 24), iron)); p.rotation.x = Math.PI / 2; p.position.z = s * 0.08; g.add(p); }); root.add(g); return g; })() }));
+// spine: vertebrae along the back + green straight guide
+const verts = []; for (let i = 0; i < 14; i++) { const v = cast(new THREE.Mesh(new RoundedBoxGeometry(0.05, 0.03, 0.045, 2, 0.01), bone)); root.add(v); verts.push(v); }
+const guide = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 1, 8), glow); root.add(guide);
+// ribs
+
+const V = (x, y, z = 0) => new THREE.Vector3(x, y, z);
+const deg = Math.PI / 180;
+window.pose = (theta, phi, yaw = 0.5) => {
+  const a = 0.35 * phi * deg, b = 0.65 * phi * deg, t = theta * deg;
+  const ank = V(0, 0.09), knee = V(Math.sin(a) * 0.46, 0.09 + Math.cos(a) * 0.46), hip = V(knee.x - Math.sin(b) * 0.46, knee.y + Math.cos(b) * 0.46);
+  const td = V(Math.sin(t), Math.cos(t)); const sh = hip.clone().addScaledVector(td, 0.52);
+  // balance: shift so mid of hip/shoulder sits near ankle x
+  const shift = -((hip.x + sh.x) / 2) * 0.55;
+  [ank, knee, hip, sh].forEach(p => p.x += shift);
+  legs.forEach(l => { const z = l.z; place(l.thigh, V(hip.x, hip.y, z), V(knee.x, knee.y, z)); place(l.shin, V(knee.x, knee.y, z), V(ank.x, ank.y, z)); l.knee.position.set(knee.x, knee.y, z); l.foot.position.set(ank.x + 0.06, 0.035, z); });
+  const tN = V(td.y, -td.x); // normal (towards front/down)
+  place(torso, sh.clone().addScaledVector(td, 0.04), hip.clone().addScaledVector(td, -0.04), 1.25);
+  pelvis.position.copy(hip); pelvis.rotation.z = -t;
+  const neckTop = sh.clone().addScaledVector(td, 0.13); place(neck, neckTop, sh);
+  head.position.copy(sh).addScaledVector(td, 0.22).addScaledVector(tN, 0.02); head.rotation.z = -t;
+  jaw.position.copy(head.position).addScaledVector(tN, 0.07).addScaledVector(td, -0.04);
+  arms.forEach(r => { const s = V(sh.x, sh.y - 0.02, r.z); const e = V(sh.x + 0.03, sh.y - 0.3, r.z); const w = V(sh.x + 0.05, sh.y - 0.58, r.z); place(r.up, s, e); place(r.fo, e, w); r.sh.position.copy(s); r.db.position.set(w.x, w.y - 0.03, r.z * 0.85); });
+  const back = tN.clone().multiplyScalar(-1);
+  verts.forEach((v, i) => { const u = i / (verts.length - 1); v.position.copy(hip).addScaledVector(td, 0.02 + u * 0.56).addScaledVector(back, 0.165); v.rotation.z = -t; });
+  const g0 = hip.clone().addScaledVector(td, -0.02).addScaledVector(back, 0.2), g1 = hip.clone().addScaledVector(td, 0.66).addScaledVector(back, 0.2);
+  place(guide, g1, g0); guide.scale.x = guide.scale.z = 1.6;
+  root.rotation.y = -yaw;
+  cam.position.set(0, 1.05, 4.3); cam.lookAt(0, 0.82, 0);
+  renderer.render(scene, cam); return true;
+};
+window.grab = () => renderer.domElement.toDataURL('image/png');
+window.READY = true;
+</script></body></html>
