@@ -10,3 +10,9 @@ Style copied from a reference clip: vertical split screen with ❌/✅ badges an
   4 s wrong single, 4 s correct single; framed for TikTok/Reels safe zones and the 4:5 feed crop;
   audio loudness-normalised to -14 LUFS
 - `mannequin.html` / `mannequin_render.js` optional 3D anatomical mannequin (not used in the final cut)
+
+## iPhone HDR sources (HLG / Dolby Vision)
+Tone-map to SDR before anything else, otherwise the output looks washed out:
+```bash
+ffmpeg -i in.mov -vf "zscale=tin=arib-std-b67:min=bt2020nc:pin=bt2020:rin=tv:t=linear:npl=203,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,scale=1080:1920,fps=30" -c:v libx264 -crf 16 -an -color_primaries bt709 -color_trc bt709 -colorspace bt709 out.mp4
+```

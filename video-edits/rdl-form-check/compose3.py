@@ -57,7 +57,7 @@ tD = [max(tD[0], 0.15), max(tD[1], 0.45), max(tD[2], tD[1] + 0.35)]
 print("label times", tD, tC)
 
 enc = subprocess.Popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{W}x{H}', '-r', str(FPS), '-i', '-',
-                        '-c:v', 'libx264', '-preset', 'medium', '-crf', '17', '-pix_fmt', 'yuv420p', D + '/video_only.mp4'], stdin=subprocess.PIPE)
+                        '-c:v', 'libx264', '-preset', 'medium', '-crf', '17', '-pix_fmt', 'yuv420p', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709', D + '/video_only.mp4'], stdin=subprocess.PIPE)
 for kind, tc, td, k in segs:
     if kind == "split":
         fd = getD(td, True).convert("RGBA"); fd.alpha_composite(R.overlay(TD, td, "bad"))
